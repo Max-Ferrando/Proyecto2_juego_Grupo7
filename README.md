@@ -58,3 +58,45 @@ make PREFIX=riscv64-elf- blink    # if your toolchain uses a different prefix
 Drop a new `<name>.s` file in `sw/` and `make <name>` picks it up automatically, no `Makefile` changes needed. Don't forget to change the MemFile in pochoco_soc.v.
 
 **CATCH:** The core implements [RV32E](https://docs.riscv.org/reference/isa/v20260120/unpriv/rv32.html), with one thing worth knowing: shift instructions (`SLL`/`SRL`/`SRA`/`SLLI`/`SRLI`/`SRAI`) are decoded correctly but disabled in the ALU to save LUTs on the target FPGA, so they currently execute as `ADD` instead. Avoid shifts in your assembly, or design your own shifter...
+
+---
+
+## Proyecto 2: Juego de reflejos
+
+### Cómo usar
+
+| Comando | Qué hace |
+|---|---|
+| `make hex` | Ensambla `sw/game.s` → `sw/game.hex` (y `sw/game.lst`) con **nuestro** assembler |
+| `make` | `hex` + síntesis + place & route + bitstream + programa la Go Board |
+| `make bin` | Igual que `make` pero sin programar |
+| `make sim` | Simula una partida completa (Icarus Verilog) |
+| `make test` | Pruebas del assembler |
+
+Regenerar el hex a mano:
+
+```bash
+python3 tools/rvasm.py sw/game.s -o sw/game.hex -l sw/game.lst
+```
+
+Cambiar una constante sin editar el fuente (por ejemplo, 4 s de fase inicial en vez de 3):
+
+```bash
+python3 tools/rvasm.py sw/game.s -o sw/game.hex -D ALL_ON_TIME=100000000
+make
+```
+
+### Cómo se juega
+
+1. Al encender, los LEDs giran en carrusel: presiona cualquier botón para empezar.
+2. Cada ronda: los 4 LEDs se encienden 3,0 s, luego queda solo el LED objetivo.
+3. Presiona el botón bajo ese LED. El display muestra el tiempo en décimas de segundo (máximo 9,9 s → `99`).
+4. Botón incorrecto: el display muestra `EE`, los LEDs parpadean y se repite la ronda (las correctas se conservan).
+5. Tras 10 respuestas correctas se muestra el promedio y los LEDs alternan `0101`/`1010`. Presiona un botón para jugar de nuevo.
+
+### Cambios al RTL
+
+* `rtl/game_top.v`: top-level que instancia `pochoco_soc` con `MemFile = "sw/game.hex"`.
+* `rtl/pochoco_periph.v`: contador de ciclos de 32 bits en `0x8000_000C` y sincronizador de 2 FF para los botones.
+
+Reloj: 25 MHz → 1 décima = 2.500.000 ciclos.
