@@ -1,102 +1,285 @@
 # Pochoco SoC & Espino Core
 
-> Meet Pochoco SoC and Espino Core. Inspired by the native flora of the Pochoco trails, it is an entry-level, highly efficient architecture designed to flourish in resource-constrained environments.
+Este repositorio contiene el diseño de un procesador de 32 bits y un System-on-Chip (SoC) implementado en Verilog para ser utilizado en una FPGA.
+
+El proyecto está pensado para trabajar conceptos de Arquitectura de Computadores, como ejecución de instrucciones, memoria, periféricos, registros y comunicación entre distintos módulos del sistema.
 
 ![Pochoco SoC Architecture](pochoco_soc.svg)
 
-Welcome to the repository! This project contains the RTL for a custom 32-bit processor and its surrounding System-on-Chip (SoC) designed for FPGA deployment. The design is kept straightforward to help explore and understand computer architecture fundamentals.
+## Estructura del proyecto
 
-This is meant to be forked, not just cloned. You'll be poking around the RTL, so make it your own, we won't judge (we might even be a little proud).
+El diseño está dividido principalmente en dos partes: Espino Core y Pochoco SoC.
 
-## Repository Structure
+### Espino Core
 
-The hardware is written in Verilog and divided into these main categories:
+Espino Core corresponde al procesador del sistema. Incluye los módulos principales necesarios para ejecutar instrucciones:
 
-* **The Espino Core**: The central processing unit. It includes all standard pipeline stages like instruction fetch, instruction decode, an ALU for execution, a register file, a load/store unit for memory operations, and a pipeline controller. It implements [RV32E](https://docs.riscv.org/reference/isa/v20260120/unpriv/rv32.html) with a catch you might want to check out the code for.
-* **The Pochoco SoC**: The top-level system wrapper. It connects the CPU core to a unified instruction/data RAM, physical board peripherals (like LEDs, switches, and displays), and an external SPI slave interface.
-* **Build Files**: Constraints to map the design to the physical FPGA pins, and automation scripts for synthesis, routing, and flashing using an open-source toolchain.
+- Instruction Fetch
+- Instruction Decode
+- ALU
+- Banco de registros
+- Load/Store Unit
+- Control del pipeline
 
-## Memory Map
+El procesador implementa [RV32E](https://docs.riscv.org/reference/isa/v20260120/unpriv/rv32.html).
 
-The SoC routes memory and data requests using a hardcoded address decoding scheme based on the highest bits of the 32-bit address.
+Actualmente las instrucciones de shift (`SLL`, `SRL`, `SRA`, `SLLI`, `SRLI` y `SRAI`) son decodificadas, pero no están implementadas en la ALU para disminuir el uso de LUTs en la FPGA.
 
-* **`0x0000_0000` - Unified RAM**: The shared memory space for both instructions and data.
-* **`0x8000_0000` - Board Peripherals**: Memory-mapped I/O for the physical board.
-  * `Offset 0x00`: 7-Segment Displays
-  * `Offset 0x04`: LEDs
-  * `Offset 0x08`: Button Inputs
-* **`0x8001_0000` - SPI Slave**: Custom SPI interface routing.
-  * `Offset 0x00`: SPI Status (Chip Select state, New Data flag)
-  * `Offset 0x04`: Received "Price" byte (from external master)
-  * `Offset 0x08`: "Decision" byte (written by CPU to transmit)
+Por este motivo, estas instrucciones deben evitarse en los programas Assembly utilizados actualmente.
 
-Dive into the source code to see exactly how these components and connections are built under the hood!
+### Pochoco SoC
 
-## How to Build
+Pochoco SoC es el módulo principal que conecta el procesador con el resto del sistema.
 
-To synthesize and build the project, you will need the open-source FPGA toolchain.
+Incluye:
 
-1. Install the tools by following the instructions at the [oss-cad-suite-build repository](https://github.com/yosyshq/oss-cad-suite-build).
-2. Once installed, ~~blindly copy-paste~~ (we strongly encourage reading the Makefile first to make sure we aren't deleting your home directory) the following command in the project root to generate and program the final bitstream:
+- Memoria RAM compartida para instrucciones y datos
+- LEDs de la placa
+- Botones
+- Displays de 7 segmentos
+- Interfaz SPI
+- Periféricos mapeados en memoria
+
+## Mapa de memoria
+
+El sistema utiliza distintas direcciones para acceder a la memoria y a los periféricos.
+
+### RAM
+
+Dirección base:
+
+```text
+0x0000_0000
+```
+
+Esta memoria se utiliza tanto para instrucciones como para datos.
+
+### Periféricos de la placa
+
+Dirección base:
+
+```text
+0x8000_0000
+```
+
+Offsets disponibles:
+
+| Offset | Periférico |
+|---|---|
+| `0x00` | Displays de 7 segmentos |
+| `0x04` | LEDs |
+| `0x08` | Botones |
+| `0x0C` | Contador de ciclos |
+
+### SPI
+
+Dirección base:
+
+```text
+0x8001_0000
+```
+
+Offsets:
+
+| Offset | Función |
+|---|---|
+| `0x00` | Estado SPI |
+| `0x04` | Byte recibido |
+| `0x08` | Byte enviado por el procesador |
+
+## Compilación
+
+Para compilar el proyecto es necesario tener instalado el toolchain para FPGA.
+
+Se puede utilizar OSS CAD Suite:
+
+https://github.com/YosysHQ/oss-cad-suite-build
+
+Una vez instaladas las herramientas, desde la carpeta principal del proyecto se puede ejecutar:
 
 ```bash
 make all
 ```
 
+Este comando realiza la síntesis, place & route, genera el bitstream y programa la FPGA.
+
+También se puede utilizar:
+
+```bash
+make bin
+```
+
+para generar el bitstream sin programar la placa.
+
 ## Software
 
-The `sw/` folder holds the RV32E assembly example programs that run on the Espino Core (`blink.s`, `7seg.s`, `buttons_leds.s`), plus a `Makefile` to assemble them into the `.hex` files the RTL loads at boot via `$readmemh`.
+La carpeta:
 
-You'll need a RISC-V toolchain on your `PATH` (`riscv64-unknown-elf-{as,ld,objcopy}` on Debian/Ubuntu/WSL via `sudo apt install gcc-riscv64-unknown-elf`, or `brew install riscv64-unknown-elf-gcc` on macOS). If your toolchain uses a different prefix, override it on the command line rather than editing the Makefile:
+```text
+sw/
+```
+
+contiene los programas en Assembly que se ejecutan en Espino Core.
+
+Algunos ejemplos son:
+
+```text
+blink.s
+7seg.s
+buttons_leds.s
+game.s
+```
+
+Estos archivos son ensamblados y convertidos a archivos `.hex`, que posteriormente son cargados en memoria mediante `$readmemh`.
+
+Para compilar uno de los programas se puede utilizar:
 
 ```bash
 cd sw
-make blink                        # assembles blink.s -> blink.hex
-make PREFIX=riscv64-elf- blink    # if your toolchain uses a different prefix
+make blink
 ```
 
-Drop a new `<name>.s` file in `sw/` and `make <name>` picks it up automatically, no `Makefile` changes needed. Don't forget to change the MemFile in pochoco_soc.v.
+Esto genera el archivo:
 
-**CATCH:** The core implements [RV32E](https://docs.riscv.org/reference/isa/v20260120/unpriv/rv32.html), with one thing worth knowing: shift instructions (`SLL`/`SRL`/`SRA`/`SLLI`/`SRLI`/`SRAI`) are decoded correctly but disabled in the ALU to save LUTs on the target FPGA, so they currently execute as `ADD` instead. Avoid shifts in your assembly, or design your own shifter...
+```text
+blink.hex
+```
+
+Si el toolchain instalado utiliza un prefijo diferente, este se puede indicar directamente al ejecutar `make`.
+
+Por ejemplo:
+
+```bash
+make PREFIX=riscv64-elf- blink
+```
+
+También es posible agregar nuevos programas.
+
+Si se crea un archivo:
+
+```text
+programa.s
+```
+
+se puede compilar con:
+
+```bash
+make programa
+```
+
+sin necesidad de modificar el `Makefile`.
+
+Al cambiar el programa que se quiere ejecutar también se debe verificar el parámetro `MemFile` utilizado por el SoC.
 
 ---
 
-## Proyecto 2: Juego de reflejos
+# Proyecto 2: Juego de reflejos
 
-### Cómo usar
+Para el Proyecto 2 se implementó un juego de reflejos utilizando Espino Core y los periféricos disponibles en la Go Board.
 
-| Comando | Qué hace |
+El programa principal del juego se encuentra en:
+
+```text
+sw/game.s
+```
+
+## Comandos principales
+
+| Comando | Función |
 |---|---|
-| `make hex` | Ensambla `sw/game.s` → `sw/game.hex` (y `sw/game.lst`) con **nuestro** assembler |
-| `make` | `hex` + síntesis + place & route + bitstream + programa la Go Board |
-| `make bin` | Igual que `make` pero sin programar |
-| `make sim` | Simula una partida completa (Icarus Verilog) |
-| `make test` | Pruebas del assembler |
+| `make hex` | Ensambla `sw/game.s` y genera `sw/game.hex` y `sw/game.lst` |
+| `make` | Genera el programa, sintetiza el hardware y programa la Go Board |
+| `make bin` | Realiza el proceso de compilación sin programar la FPGA |
+| `make sim` | Simula una partida utilizando Icarus Verilog |
+| `make test` | Ejecuta las pruebas del assembler |
 
-Regenerar el hex a mano:
+También se puede generar el archivo `.hex` manualmente utilizando:
 
 ```bash
 python3 tools/rvasm.py sw/game.s -o sw/game.hex -l sw/game.lst
 ```
 
-Cambiar una constante sin editar el fuente (por ejemplo, 4 s de fase inicial en vez de 3):
+Algunas constantes del programa pueden modificarse desde la línea de comandos sin cambiar directamente el archivo Assembly.
+
+Por ejemplo, para cambiar el tiempo inicial:
 
 ```bash
 python3 tools/rvasm.py sw/game.s -o sw/game.hex -D ALL_ON_TIME=100000000
 make
 ```
 
-### Cómo se juega
+## Cómo se juega
 
-1. Al encender, los LEDs giran en carrusel: presiona cualquier botón para empezar.
-2. Cada ronda: los 4 LEDs se encienden 3,0 s, luego queda solo el LED objetivo.
-3. Presiona el botón bajo ese LED. El display muestra el tiempo en décimas de segundo (máximo 9,9 s → `99`).
-4. Botón incorrecto: el display muestra `EE`, los LEDs parpadean y se repite la ronda (las correctas se conservan).
-5. Tras 10 respuestas correctas se muestra el promedio y los LEDs alternan `0101`/`1010`. Presiona un botón para jugar de nuevo.
+Al encender el sistema, los LEDs realizan una secuencia en carrusel.
 
-### Cambios al RTL
+Para comenzar una partida se debe presionar cualquiera de los botones.
 
-* `rtl/game_top.v`: top-level que instancia `pochoco_soc` con `MemFile = "sw/game.hex"`.
-* `rtl/pochoco_periph.v`: contador de ciclos de 32 bits en `0x8000_000C` y sincronizador de 2 FF para los botones.
+Cada ronda funciona de la siguiente manera:
 
-Reloj: 25 MHz → 1 décima = 2.500.000 ciclos.
+1. Los cuatro LEDs se encienden durante aproximadamente 3 segundos.
+2. Después queda encendido solamente uno de los LEDs.
+3. El jugador debe presionar el botón correspondiente a ese LED.
+4. El tiempo de respuesta se muestra en los displays en décimas de segundo.
+5. Si se presiona el botón incorrecto, los displays muestran `EE`.
+6. Los LEDs parpadean para indicar el error.
+7. La ronda se repite hasta obtener una respuesta correcta.
+8. Las respuestas correctas anteriores se mantienen.
+9. Después de 10 respuestas correctas se calcula el tiempo promedio.
+10. El promedio se muestra en los displays.
+11. Los LEDs alternan entre `0101` y `1010`.
+12. Al presionar nuevamente un botón comienza una nueva partida.
+
+El tiempo máximo mostrado es:
+
+```text
+9.9 segundos
+```
+
+que aparece en el display como:
+
+```text
+99
+```
+
+## Cambios realizados al RTL
+
+Para implementar el juego se realizaron algunos cambios y se agregaron módulos al diseño original.
+
+### `rtl/game_top.v`
+
+Este archivo corresponde al top-level utilizado para el juego.
+
+El módulo instancia `pochoco_soc` utilizando:
+
+```text
+sw/game.hex
+```
+
+como programa cargado inicialmente en memoria.
+
+### `rtl/pochoco_periph.v`
+
+En este módulo se agregó:
+
+- Un contador de ciclos de 32 bits
+- Un sincronizador de dos flip-flops para las entradas de los botones
+
+El contador de ciclos se encuentra mapeado en la dirección:
+
+```text
+0x8000_000C
+```
+
+La FPGA utiliza un reloj de:
+
+```text
+25 MHz
+```
+
+Por lo tanto:
+
+```text
+1 décima de segundo = 2.500.000 ciclos
+```
+
+Este contador se utiliza para medir el tiempo de reacción del jugador durante cada ronda.
