@@ -29,7 +29,7 @@
 .equ CLK_HZ,      25000000              # reloj de la Go Board: 25 MHz
 .equ TENTH,       CLK_HZ / 10           # ciclos por decima de segundo (2.500.000)
 .equ HALF_TENTH,  TENTH / 2             # para redondear al entero mas cercano
-.equ ALL_ON_TIME, 10 * TENTH            # fase inicial: 3,0 s con los 4 LEDs
+.equ ALL_ON_TIME, 30 * TENTH            # fase inicial: 3,0 s con los 4 LEDs
 .equ NUM_ROUNDS,  10                    # respuestas correctas por partida
 .equ MAX_TENTHS,  99                    # el display solo muestra 2 digitos
 .equ MAX_CYCLES,  MAX_TENTHS * TENTH    # saturacion por ronda (9,9 s)
